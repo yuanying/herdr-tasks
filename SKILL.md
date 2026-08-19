@@ -154,4 +154,5 @@ herdr agent prompt "$COORD_NAME" "あなたはこのタスクの coordinator で
 - `SKILL.md` — このファイル。呼び出し元の手順と全体像。
 - `coordinator.md` — coordinator が読む手順書。
 - `worker.md` — worker が読む手順書。
+- `scripts/install-skill.sh` — `~/.agents/skills` と `~/.claude/skills` に symlink を張る。
 - `docs/adr/` — 設計判断の記録。
