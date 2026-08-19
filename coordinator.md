@@ -88,11 +88,23 @@ herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <tab create 応答の .re
 起動したら worker にタスクを渡す。**`--wait` は付けない**。全 worker を起動してから待つことで
 並列化する。
 
+**`herdr agent start` の直後に prompt を投げるとテキストが消えることがある。**
+送信前に agent の `agent_session` が確定するまで待ち、送信後に `agent_status` が `idle` から
+動いたことを確認する。手順と関数の定義は `SKILL.md` の「プロンプトの着弾を確認する」にある。
+
 ```bash
+wait_agent_session "$WORKER_NAME"
+
 herdr agent prompt "$WORKER_NAME" "あなたはこのタスクの worker です。まず <スキルのパス>/worker.md を読み、次に <タスクディレクトリ>/TASK.md を読んでください。あなたの担当は <リポジトリ名> の <担当範囲> です。<依存や前提があればここに書く>。完了したら報告してください。"
+
+confirm_prompt_delivered "$WORKER_NAME"
 ```
 
 担当範囲は具体的に書く。worker は他リポジトリの状況を知らない。
+
+worker が起動したのに一向に動き出さない場合、まず疑うのはプロンプトの消失である。
+`herdr agent read "$WORKER_NAME" --source recent` で入力欄が空のままなら届いていないので、
+同じプロンプトを送り直す。
 
 ## 6. 監視とエスカレーション
 
