@@ -10,7 +10,8 @@ test "${HERDR_ENV:-}" = 1
 printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_PANE_ID"
 ```
 
-自分の cwd が git 作業ツリーかどうかも確認する。これが後の分岐に効く。
+この `HERDR_WORKSPACE_ID` がタスク全体で共有する唯一の workspace である。自分の cwd が
+対象の git 作業ツリーかどうかも確認する。これが後の分岐に効く。
 
 ```bash
 git rev-parse --show-toplevel 2>/dev/null
@@ -26,7 +27,7 @@ git rev-parse --show-toplevel 2>/dev/null
 ## 2. 進捗表を作る
 
 `PROGRESS.md` に、対象リポジトリごとの状態表を作る。以降、状態が変わるたびに更新する。
-記録すべき項目は、リポジトリ / worktree のパス / ブランチ / 担当 worker 名 / 状態
+記録すべき項目は、リポジトリ / worktree のパス / tab ID / ブランチ / 担当 worker 名 / 状態
 （未着手・作業中・検証中・完了・要判断）/ 直近の出来事。
 
 判断の経緯や調査で分かったことは `notes/` に書く。これは後からユーザーが読む記録になる。
@@ -44,11 +45,15 @@ ghq list --full-path
 
 ## 4. 実行体制を決める
 
-- **対象が自分の worktree のリポジトリ 1 つだけ** → worker は立てず、自分で実装する。
-  実装の規律は `worker.md` に従う。
-- **自分の cwd が git 作業ツリーでない、または対象が自分のリポジトリ以外** → 対象リポジトリごとに
-  worktree を作る。対象が 1 つならそこへ自分で移動して実装してもよい。
-- **対象が複数** → リポジトリごとに worker を立てる。
+- **自分の cwd が対象リポジトリの worktree** → その 1 リポジトリだけは coordinator が
+  自分で実装してよい。実装の規律は `worker.md` に従う。
+- **自分の cwd が git 作業ツリーでない、または対象が自分のリポジトリ以外** →
+  対象が 1 つでも必ず、そのリポジトリの worktree tab と worker を作る。coordinator が
+  対象リポジトリへ `cd` して実装してはならない。
+- **対象が複数** → coordinator が担当する 1 リポジトリを除き、リポジトリごとに worker tab を立てる。
+
+worker tab はすべて coordinator と同じ `HERDR_WORKSPACE_ID` に作る。タスクのために
+追加の workspace を作ってはならない。
 
 実行順序は **既定を並列** とし、TASK.md に依存関係がある部分だけ直列にする。
 依存先の作業が完了し、自分の検証が通ってから依存元の worker を起動する。
@@ -58,18 +63,27 @@ TASK.md に書き足す。それが並列化できる範囲を最大化する。
 
 ## 5. worker を起動する
 
-リポジトリごとに worktree workspace を作り、その root pane に agent を立てる。
+リポジトリごとに `git worktree` を作り、タスク workspace にその cwd の tab を追加して、
+tab の root pane に agent を立てる。`herdr worktree create` は新しい workspace を作るため
+worker には使わない。
 
 ```bash
 git -C "$REPO_PATH" fetch origin        # remote がある場合
-herdr worktree create --cwd "$REPO_PATH" --branch "$BRANCH" --base <デフォルトブランチの最新> \
-  --label "$TASK_NAME/$REPO_NAME" --no-focus
-herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <応答の root_pane.pane_id>
+WORKTREE_PATH="$TASK_DIR/worktrees/$REPO_NAME"
+mkdir -p "$TASK_DIR/worktrees"
+git -C "$REPO_PATH" worktree add -b "$BRANCH" "$WORKTREE_PATH" <デフォルトブランチの最新>
+herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$WORKTREE_PATH" \
+  --label "$REPO_NAME" --no-focus
+herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <tab create 応答の .result.root_pane.pane_id>
 ```
 
-- ブランチ名・ラベル・agent 名の規則は `SKILL.md` の命名規則に従う。
+- ブランチ名・tab ラベル・agent 名の規則は `SKILL.md` の命名規則に従う。
 - `--kind` は自分と同じ kind を既定とし、TASK.md に指定があればそれに従う。
-- ID は応答 JSON から読む。推測しない。
+- `tab_id` と `root_pane.pane_id` は `tab create` の応答 JSON から読む。推測しない。
+- 同名リポジトリは worktree path と tab ラベルが衝突しないよう owner などを加える。
+- 再開時に worktree が既に存在する場合は、パス・branch・対象 repository が一致することを
+  確認して再利用する。branch だけが既に存在する場合は、その履歴がタスクの意図と一致することを
+  確認して `-b` なしで worktree に追加する。重複作成や既存 branch の上書きはしない。
 
 起動したら worker にタスクを渡す。**`--wait` は付けない**。全 worker を起動してから待つことで
 並列化する。
@@ -132,11 +146,16 @@ worker の完了報告は受け取るが、**成果の真偽は自分で確か�
 
 ## 10. 片付け
 
-**ユーザーに確認してから** 行う。勝手に消さない。
+**ユーザーに確認してから** 行う。勝手に消さない。まず worker の worktree が clean で、
+コミットが存在することを確認する。
 
 ```bash
-herdr worktree remove --workspace <worker の workspace_id>
+herdr tab close <worker の tab_id>
+git -C "$REPO_PATH" worktree remove "$WORKTREE_PATH"
 ```
 
-worker の workspace から順に片付け、自分の workspace は最後にする。
-ブランチとコミットは残す。タスクディレクトリも残す。
+worker tab と worktree を順に片付け、最後に coordinator workspace を閉じる。coordinator が
+linked worktree 上にいる場合は `herdr worktree remove --workspace "$HERDR_WORKSPACE_ID"`、
+TASK_DIR 上の通常 workspace なら `herdr workspace close "$HERDR_WORKSPACE_ID"` で閉じる。
+ブランチとコミットは残す。
+タスクディレクトリも残す。

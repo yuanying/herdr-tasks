@@ -1,7 +1,7 @@
 # 0001. herdr-tasks スキルのアーキテクチャ
 
 - Date: 2026-08-19
-- Status: Accepted
+- Status: Superseded by [ADR 0002](0002-task-workspace-with-repository-tabs.md)
 
 ## Context
 

@@ -3,9 +3,9 @@
 herdr の workspace / worktree を使って、与えられたタスクを
 完遂まで面倒を見る Coding Agent 向けスキル。
 
-タスクを受け取ったら専用の workspace を作り、そこに常駐する **coordinator** にタスク完遂までの
-責任を持たせる。対象が複数リポジトリにまたがる場合は、リポジトリごとに worktree を切って
-**worker** を立て、coordinator がそれらを取りまとめる。
+タスクを受け取ったら **1 タスク = 1 workspace** の専用 workspace を作り、その root tab に
+常駐する **coordinator** にタスク完遂までの責任を持たせる。作業対象ごとに同じ workspace 内へ
+リポジトリ別の worktree tab を作って **worker** を立て、coordinator がそれらを取りまとめる。
 
 特定の Coding Agent に依存しない。`herdr` CLI と `git`、`ghq` があれば動く。
 
@@ -15,13 +15,15 @@ herdr の workspace / worktree を使って、与えられたタスクを
 呼び出し元 (現在の pane)
   │  タスク仕様書を書き、coordinator を起動して手を引く
   ▼
-coordinator workspace                    ~/.local/state/herdr-tasks/<タスク名>/
-  │  タスク完遂までの責任を持つ            TASK.md / PROGRESS.md / notes/
-  ├─▶ worker workspace (リポジトリ A の worktree)
-  └─▶ worker workspace (リポジトリ B の worktree)
+task workspace                           ~/.local/state/herdr-tasks/<タスク名>/
+  ├─ coordinator root tab                 TASK.md / PROGRESS.md / notes/
+  ├─ worker tab (リポジトリ A の worktree)
+  └─ worker tab (リポジトリ B の worktree)
 ```
 
-- 対象リポジトリが coordinator のいるリポジトリ 1 つだけなら、worker は立てず coordinator が自分で実装する。
+- 呼び出し元と作業対象が同じリポジトリの場合だけ、coordinator がその worktree を担当できる。
+- 呼び出し元と作業対象が異なる場合は、対象が 1 リポジトリでも必ず worker tab を作る。
+- 複数リポジトリでも workspace は増やさず、リポジトリ別 tab としてまとめる。
 - coordinator と worker は別プロセスであり、会話文脈は引き継がれない。渡せるのはファイルのパスだけである。
   そのためタスク仕様書 `TASK.md` の質がそのままタスクの成否を左右する。
 - 完遂の定義は「実装 + テスト通過 + コミット」まで。push と PR 作成は人が判断する。
@@ -68,7 +70,7 @@ herdr agent attach <coordinator の agent 名>
 |---|---|
 | タスク名 | `#42-add-retry-to-uploader` |
 | coordinator workspace | `#42-add-retry-to-uploader` |
-| worker workspace | `#42-add-retry-to-uploader/herdr` |
+| worker tab | `herdr` |
 | ブランチ | `issue-42-add-retry-to-uploader` |
 | タスクディレクトリ | `~/.local/state/herdr-tasks/#42-add-retry-to-uploader/` |
 | agent 名 | `coord-42-add-retry` / `work-42-herdr` |
