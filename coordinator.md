@@ -89,22 +89,22 @@ herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <tab create 応答の .re
 並列化する。
 
 **`herdr agent start` の直後に prompt を投げるとテキストが消えることがある。**
-送信前に agent の `agent_session` が確定するまで待ち、送信後に `agent_status` が `idle` から
-動いたことを確認する。手順と関数の定義は `SKILL.md` の「プロンプトの着弾を確認する」にある。
+送信前後の判定を共通化したスクリプトを使う。Codex の初回起動では、session ID が最初の入力後に
+生成される場合や、directory trust 確認で止まる場合もこのスクリプトが検出する。
 
 ```bash
-wait_agent_session "$WORKER_NAME"
-
-herdr agent prompt "$WORKER_NAME" "あなたはこのタスクの worker です。まず <スキルのパス>/worker.md を読み、次に <タスクディレクトリ>/TASK.md を読んでください。あなたの担当は <リポジトリ名> の <担当範囲> です。<依存や前提があればここに書く>。完了したら報告してください。"
-
-confirm_prompt_delivered "$WORKER_NAME"
+<スキルのパス>/scripts/prompt-agent.sh "$WORKER_NAME" \
+  "あなたはこのタスクの worker です。まず <スキルのパス>/worker.md を読み、次に <タスクディレクトリ>/TASK.md を読んでください。あなたの担当は <リポジトリ名> の <担当範囲> です。<依存や前提があればここに書く>。完了したら報告してください。"
 ```
+
+exit 2 の場合は `SKILL.md` の trust 確認手順に従い、agent の cwd が今作成した worker worktree と
+一致する場合だけ承認して、同じコマンドを再実行する。
 
 担当範囲は具体的に書く。worker は他リポジトリの状況を知らない。
 
 worker が起動したのに一向に動き出さない場合、まず疑うのはプロンプトの消失である。
-`herdr agent read "$WORKER_NAME" --source recent` で入力欄が空のままなら届いていないので、
-同じプロンプトを送り直す。
+`herdr agent read "$WORKER_NAME" --source recent` で terminal を確認する。スクリプトは重複送信を
+避けるため自動再送しないので、agent が処理していないことを確認できた場合だけ手動で再送する。
 
 ## 6. 監視とエスカレーション
 

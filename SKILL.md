@@ -141,17 +141,16 @@ herdr agent start "$COORD_NAME" --kind "$KIND" --pane "$ROOT_PANE"
 
 `--wait` は付けない。投げたら戻る。
 
-**送信前に agent がプロンプトを受け付けられる状態になるまで待つ。** 詳細は「プロンプトの着弾を確認する」を参照。
+**送信前に agent がプロンプトを受け付けられる状態になるまで待ち、送信後に着弾を確認する。**
+手書きのポーリング処理を作らず、このスキルのスクリプトを使う。
 
 ```bash
-wait_agent_session "$COORD_NAME"
-
-herdr agent prompt "$COORD_NAME" "あなたはこのタスクの coordinator です。まず <スキルのパス>/coordinator.md を読み、次に $TASK_DIR/TASK.md を読み、その手順に従ってタスクを完遂してください。"
-
-confirm_prompt_delivered "$COORD_NAME"
+<スキルのパス>/scripts/prompt-agent.sh "$COORD_NAME" \
+  "あなたはこのタスクの coordinator です。まず <スキルのパス>/coordinator.md を読み、次に $TASK_DIR/TASK.md を読み、その手順に従ってタスクを完遂してください。"
 ```
 
 `<スキルのパス>` はこの SKILL.md が置かれているディレクトリの絶対パスに置き換える。
+スクリプトが exit 2 を返した場合は、後述の trust 確認を処理してから同じコマンドを再実行する。
 
 ### 8. 報告して終わる
 
@@ -172,57 +171,43 @@ confirm_prompt_delivered "$COORD_NAME"
 ある。このとき `agent prompt` は `agent_prompted` を返して成功したように見えるため、投げっぱなしにすると
 気づけない。coordinator を起動して沈黙する、worker が動き出さない、といった形で後から発覚する。
 
-見分け方は `agent_session` の有無である。まだセッションが確定していない agent は応答に
-`agent_session` を持たず、`agent_status` が `blocked`、`revision` が `0` になる。
+通常は `agent_session` の有無で見分ける。まだセッションが確定していない agent は応答に
+`agent_session` を持たず、`revision` が `0` のままになる。
 
 | | 受け付けられない状態 | 受け付けられる状態 |
 |---|---|---|
 | `agent_session` | 無し | `{"kind":"id","value":"..."}` |
-| `agent_status` | `blocked` | `idle` |
 | `revision` | `0` | `1` 以上 |
 
-そこで **送信前に待ち、送信後に確認する**。agent を起動してプロンプトを渡す箇所ではすべてこれを行う
-（呼び出し元が coordinator に渡すとき、coordinator が worker に渡すときの両方）。
+ただし Codex の一部バージョンは、最初のプロンプトを送るまで session ID を生成しない。
+この場合に限り、`idle`、`interactive_ready: true`、`revision > 0` に加え、terminal に空の
+`Ask Codex to do anything` 入力欄が見えていれば送信可能と判断する。送信後には必ず
+`agent_session` が生成され、状態または revision が変化したことを確認する。
 
-### 送信前: セッションが確定するまで待つ
+この判定を coordinator と worker の起動箇所で同じように行うため、
+[`scripts/prompt-agent.sh`](scripts/prompt-agent.sh) を使う。スクリプトは次を行う。
 
-```bash
-wait_agent_session() {
-  local name="$1" i
-  for i in $(seq 1 60); do
-    if herdr agent get "$name" 2>/dev/null \
-       | jq -e '.result.agent.agent_session.value // empty' >/dev/null; then
-      return 0
-    fi
-    sleep 1
-  done
-  echo "agent $name のセッションが確定しない" >&2
-  return 1
-}
+- 送信前に session ID、または上記 Codex 入力欄のどちらかを待つ。
+- プロンプトは1回だけ送る。
+- 送信後に session ID と状態遷移を確認する。
+- 確認できない場合は terminal 出力を表示して失敗する。重複送信は自動で行わない。
+
+### ディレクトリの trust 確認で止まった場合
+
+新しいタスクディレクトリや worktree で Codex を初めて起動すると、次の画面で止まることがある。
+
+```text
+Do you trust the contents of this directory?
 ```
 
-### 送信後: 届いたことを確認する
+`prompt-agent.sh` はこの状態を検出すると exit 2 で停止する。自動承認はしない。
+`herdr agent get` の `cwd` が、このタスクのために自分が作成した `$TASK_DIR` または worker
+worktree と完全一致することを確認する。一致した場合だけ、応答から得た `pane_id` に Enter を送り、
+同じ `prompt-agent.sh` コマンドを再実行する。cwd が異なる、または内容を自分で用意していない場合は
+承認せずユーザーへ確認する。
 
-送ったプロンプトが画面に現れたか、agent が動き出したかを見る。
-
-```bash
-confirm_prompt_delivered() {
-  local name="$1" i
-  for i in $(seq 1 30); do
-    case "$(herdr agent get "$name" | jq -r '.result.agent.agent_status')" in
-      working|blocked|done) return 0 ;;
-    esac
-    sleep 1
-  done
-  herdr agent read "$name" --source recent --lines 40
-  echo "プロンプトが届いていない可能性がある。上の出力を確認して送り直すこと" >&2
-  return 1
-}
-```
-
-`agent_status` が `idle` のまま動かない場合は届いていない。**同じプロンプトをもう一度送ってよい**
-（届いていないので重複にはならない）。それでも駄目なら `herdr agent read` で画面を直接見て、
-入力欄にテキストが残っていないか、承認ダイアログなど別の画面に切り替わっていないかを確認する。
+送信確認に失敗した場合も、スクリプトは同じプロンプトを自動再送しない。表示された terminal を読み、
+入力欄に残っているだけなのか、agent がすでに処理したのかを確認してから再送可否を判断する。
 
 ## coordinator が停止した場合の再開
 
@@ -235,4 +220,5 @@ confirm_prompt_delivered() {
 - `coordinator.md` — coordinator が読む手順書。
 - `worker.md` — worker が読む手順書。
 - `scripts/install-skill.sh` — `~/.agents/skills` と `~/.claude/skills` に symlink を張る。
+- `scripts/prompt-agent.sh` — agent の入力待ち・trust 停止・プロンプト着弾を判定する。
 - `docs/adr/` — 設計判断の記録。
