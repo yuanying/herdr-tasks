@@ -73,7 +73,7 @@ issue 由来かどうかを判断し、上の命名規則に従って `TASK_NAME
 
 ```bash
 TASK_DIR="$HOME/.local/state/herdr-tasks/$TASK_NAME"
-mkdir -p "$TASK_DIR/notes"
+mkdir -p "$TASK_DIR/notes/workers"
 ```
 
 `$TASK_DIR/TASK.md` に以下を書く。**coordinator が受け取れる文脈はこのファイルだけ**なので、
@@ -87,8 +87,13 @@ mkdir -p "$TASK_DIR/notes"
 - **制約・方針** — 既存の設計方針、触ってはいけない箇所、踏襲すべき既存実装。
 - **完了条件** — 通すべきテストコマンドを具体的に書く。
 - **参考情報** — issue URL、関連ファイル、既存の議論、ADR。
+- **実行環境** — このスキルが置かれているディレクトリの絶対パス。coordinator と worker が
+  手順書を読むために使う。workspace ID と agent kind は手順 5 の後に追記する。
 
 `$TASK_DIR/PROGRESS.md` は空で作る（coordinator が更新する）。
+
+タスクディレクトリに残したものが、coordinator の会話文脈が失われたときの唯一の手掛かりになる。
+会話でしか共有されていない前提は、ここで必ず書き出す。
 
 ### 3. 対象リポジトリを特定する
 
@@ -128,6 +133,9 @@ ID は応答から取る。推測しない。
 
 既定は呼び出し元と同じ kind。`herdr agent list` の中から `pane_id` が `$HERDR_PANE_ID` の
 エントリを探し、その `agent` を使う。ユーザーから指定があればそれを優先する。
+
+決めた kind と、手順 4 の応答から得た workspace ID を TASK.md の「実行環境」に追記する。
+coordinator が停止しても、この記述だけで worker を同じ kind・同じ workspace に立て直せる。
 
 ### 6. coordinator を起動する
 
@@ -211,8 +219,38 @@ worktree と完全一致することを確認する。一致した場合だけ�
 
 ## coordinator が停止した場合の再開
 
-タスクディレクトリは固定パスに残るため、同じ workspace の pane で agent を起動し直し、
-`coordinator.md` と `TASK.md`、`PROGRESS.md` を読ませれば再開できる。
+セッションのクリア、コンテキストの喪失、プロセスの停止で coordinator の会話文脈は失われる。
+タスクディレクトリは固定パスに残るため、そこから読み直させれば再開できる。**呼び出し元の
+会話文脈は必要ない。** 再開に必要な事実はすべてタスクディレクトリのファイルに書かれている
+（→ ADR 0003）。
+
+まず現状を確認する。workspace とタスクディレクトリのパスは TASK.md の「実行環境」にある。
+
+```bash
+herdr agent list
+herdr workspace list
+```
+
+coordinator の agent がまだ生きているなら、プロンプトで `coordinator.md` と `PROGRESS.md` を
+読み直させるだけでよい。agent が失われている場合は、同じ workspace の root pane に同じ名前で
+起動し直す。pane が残っていれば新しい tab は作らない。
+
+```bash
+herdr tab list --workspace "$WORKSPACE_ID"
+```
+
+応答から coordinator の tab の `root_pane.pane_id` を読む。`$COORD_NAME` と `$KIND` は
+TASK.md の「実行環境」と命名規則から決まる。
+
+```bash
+herdr agent start "$COORD_NAME" --kind "$KIND" --pane "$ROOT_PANE"
+<スキルのパス>/scripts/prompt-agent.sh "$COORD_NAME" \
+  "あなたはこのタスクの coordinator です。これは中断からの再開です。まず <スキルのパス>/coordinator.md を読み、次に $TASK_DIR/TASK.md と $TASK_DIR/PROGRESS.md を読んで、再開判定の手順から始めてください。"
+```
+
+worker は coordinator と別プロセスなので、coordinator が落ちても生き続けていることがある。
+再開した coordinator が `herdr agent list` と PROGRESS.md を突き合わせて判断するため、
+呼び出し元やユーザーが worker を先に片付ける必要はない。
 
 ## ファイル
 
