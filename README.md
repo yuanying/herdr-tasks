@@ -15,10 +15,21 @@ herdr の workspace / worktree を使って、与えられたタスクを
 呼び出し元 (現在の pane)
   │  タスク仕様書を書き、coordinator を起動して手を引く
   ▼
-task workspace                           ~/.local/state/herdr-tasks/<タスク名>/
-  ├─ coordinator root tab                 TASK.md / PROGRESS.md / notes/
+task workspace
+  ├─ coordinator root tab
   ├─ worker tab (リポジトリ A の worktree)
   └─ worker tab (リポジトリ B の worktree)
+```
+
+タスクの状態はすべて固定パスのタスクディレクトリに残る。
+
+```
+~/.local/state/herdr-tasks/<タスク名>/
+  ├─ TASK.md          仕様。coordinator が受け取る唯一の文脈
+  ├─ PROGRESS.md      リポジトリごとの状態表
+  ├─ notes/           判断の経緯
+  │   └─ workers/     worker ごとの指示ファイル
+  └─ worktrees/       worker の作業ツリー
 ```
 
 - 呼び出し元と作業対象が同じリポジトリの場合だけ、coordinator がその worktree を担当できる。
@@ -28,6 +39,8 @@ task workspace                           ~/.local/state/herdr-tasks/<タスク�
   そのためタスク仕様書 `TASK.md` の質がそのままタスクの成否を左右する。
 - 完遂の定義は「実装 + テスト通過 + コミット」まで。push と PR 作成は人が判断する。
 - coordinator は worker の完了報告を鵜呑みにせず、`git log` / `git diff` とテストの再実行で自ら検証する。
+- coordinator の会話文脈が失われても、タスクディレクトリの記録から再開できる。worker への指示も
+  ファイルに残るため、再開に呼び出し元の会話文脈は要らない。
 
 ## インストール
 
@@ -60,6 +73,7 @@ herdr agent attach <coordinator の agent 名>
 | `coordinator.md` | coordinator が読む手順書 |
 | `worker.md` | worker が読む手順書 |
 | `scripts/install-skill.sh` | symlink を張る |
+| `scripts/prompt-agent.sh` | agent の入力待ちとプロンプト着弾を判定する |
 | `docs/adr/` | 設計判断の記録 |
 
 ## 命名規則
