@@ -23,13 +23,14 @@ coordinator がそれらを取りまとめる。
 |---|---|---|
 | 呼び出し元 | 現在の pane | タスク仕様書を書き、coordinator を起動し、起動報告をして手を引く |
 | coordinator | タスク専用 workspace の root tab | タスク完遂までの責任。worker の起動・監視・検証・取りまとめ |
-| worker | 同じ workspace 内のリポジトリ別 worktree tab | 担当リポジトリの実装・テスト・コミット |
+| worker | 同じ workspace 内の作業単位ごとの worktree tab | その作業単位の実装・テスト・コミット |
 
 - 呼び出し元のリポジトリが対象リポジトリに含まれる場合だけ、coordinator は自分の worktree を担当できる。
 - 呼び出し元と作業対象のリポジトリが異なる場合は、対象が 1 つでも必ず対象リポジトリの
   worktree tab と worker を作る。
 - 対象が複数の場合も workspace は増やさず、同じタスク workspace にリポジトリ別 tab を追加する。
 - coordinator と worker は別プロセスであり、会話文脈は引き継がれない。渡せるのは **ファイルのパス** だけである。
+- **worker は 1 PR の単位で立てて、その単位が終わったら閉じる。** 使い回さない（→ ADR 0004）。
 
 ## 前提条件
 
@@ -48,18 +49,19 @@ test "${HERDR_ENV:-}" = 1
 | タスク名（issue 関連） | `#<issue番号>-<slug>` | `#42-add-retry-to-uploader` |
 | タスク名（その他） | `<slug>` | `add-retry-to-uploader` |
 | coordinator workspace ラベル | タスク名 | `#42-add-retry-to-uploader` |
-| worker tab ラベル | `<リポジトリ名>` | `herdr` |
+| worker tab ラベル | 作業単位のブランチ名 | `add-retry` |
 | ブランチ名 | `issue-<issue番号>-<slug>` / `<slug>` | `issue-42-add-retry-to-uploader` |
 | タスクディレクトリ | `~/.local/state/herdr-tasks/<タスク名>/` | |
 | coordinator agent 名 | `coord-` + 短縮 | `coord-42-add-retry` |
-| worker agent 名 | `work-` + 短縮 + `-` + リポジトリ名 | `work-42-herdr` |
+| worker agent 名 | `work-` + 作業単位のブランチ名 | `work-add-retry` |
 
 - slug は英小文字・数字・ハイフンで、タスク内容が読み取れる 3〜5 語程度にする。
 - ブランチ名に `#` は使わない。ディレクトリ名と workspace ラベルには使う（シェルでは必ずクォートする）。
-- worker worktree は `$TASK_DIR/worktrees/<リポジトリ名>` に置く。同名リポジトリがある場合は
-  owner などを加えて task 内で一意にする。
+- **worker まわりは「担当」ではなく「作業単位」で名付ける**（→ ADR 0004）。
+  worker worktree は `$TASK_DIR/worktrees/<ブランチ名>` に置く。
+  複数リポジトリにまたがるタスクでブランチ名が衝突する場合は、リポジトリ名を前に足す。
 - agent 名は herdr の制約 `[a-z][a-z0-9_-]{0,31}` に収める。`#` を除去し、31 文字を超えるなら
-  slug 側を削る。リポジトリ名は削らない。`herdr agent list` で既存名と衝突しないことを確認し、
+  slug 側を削る。`herdr agent list` で既存名と衝突しないことを確認し、
   衝突したら末尾に `-2` を付ける。
 
 ## 呼び出し元の手順
