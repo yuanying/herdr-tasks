@@ -123,9 +123,19 @@ TASK.md に書き足す。それが並列化できる範囲を最大化する。
 
 ## 6. worker を起動する
 
-リポジトリごとに `git worktree` を作り、タスク workspace にその cwd の tab を追加して、
+**worker は 1 PR の単位で立てる**（→ ADR 0004）。
+
+```
+1 PR = 1 ブランチ = 1 worktree = 1 tab = 1 worker = 1 指示ファイル
+```
+
+作業単位ごとに `git worktree` を作り、タスク workspace にその cwd の tab を追加して、
 tab の root pane に agent を立てる。`herdr worktree create` は新しい workspace を作るため
 worker には使わない。
+
+**worker を使い回さない。** 1 つの worker に別件を積むと、コンテキストが膨れ（実測で
+575k トークン / 57% に達した）、名前が実体からずれ、指示ファイルが「どれが現在の担当か
+分からないログ」になる。その単位が終わったら手順 11 で閉じ、次は新しく作る。
 
 作る前に PROGRESS.md へ行を追加する（手順 3 の write-ahead）。
 
@@ -156,7 +166,9 @@ herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <tab create 応答の .re
 worker への指示は **プロンプトに直接書かず**、先にファイルへ書く。会話文脈は失われるが、
 ファイルは残る。差し戻し・再送・worker の立て直しは、すべてこのファイルを起点にする。
 
-`$TASK_DIR/notes/workers/$WORKER_NAME.md` に次を書く。
+`$TASK_DIR/notes/workers/$WORKER_NAME.md` に次を書く。**1 作業単位につき 1 ファイル**とし、
+**自己完結させる**。冒頭に「この 1 件だけがあなたの担当である」と明示し、
+過去の経緯は `PROGRESS.md` を読ませる。前の単位の指示を同じファイルに追記しない。
 
 - 担当リポジトリと worktree のパス、ブランチ、base コミット
 - **担当範囲** — 何をどこまでやるか。触ってはいけない箇所。
@@ -248,8 +260,12 @@ pane の出力は自分が停止すると読めなくなる。同じ内容を PR
 
 ## 11. 片付け
 
-**ユーザーに確認してから** 行う。勝手に消さない。まず worker の worktree が clean で、
-コミットが存在することを確認する。
+**PR ごとに行う**（→ ADR 0004）。タスクの最後にまとめて片付けるのではなく、
+1 つの作業単位が終わったらその worker・tab・worktree を閉じる。
+
+成果を伴う片付けは **ユーザーに確認してから** 行う。勝手に消さない。まず worker の worktree が
+clean で、コミットが存在することを確認する。取り下げた作業単位で成果が無い場合は、
+確認のうえそのまま閉じてよい。
 
 ```bash
 herdr tab close <worker の tab_id>
