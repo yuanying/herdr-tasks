@@ -205,9 +205,35 @@ worker が起動したのに一向に動き出さない場合、まず疑うの�
 
 ```bash
 herdr agent list
-herdr agent wait "$WORKER_NAME" --timeout <ms>
 herdr agent read "$WORKER_NAME" --source recent-unwrapped --lines 120
 ```
+
+### 完了待ちはバックグラウンドに置く
+
+worker を起動した直後の coordinator には、待つ以外にやることが無い。そのままターンを
+終えると、**worker が完了しても誰も気づかない。** ユーザーから見れば coordinator が
+毎回止まっている形になり、突かないと先へ進まない。
+
+ハーネスにコマンドをバックグラウンドで走らせる機能があるなら、**worker ごとに** 完了待ちを
+そこへ置く。コマンドが終了した時点でハーネスが coordinator を呼び戻すため、座って待たずに
+完了を受け取れる。
+
+```bash
+herdr agent wait "$WORKER_NAME" --until done --until blocked
+```
+
+**`--until` は必ず明示する。** 省略時は `idle` にもマッチする（既定は `idle` / `done` /
+`blocked`。`herdr agent wait --help` に書いてある）。起動直後の worker は idle なので、
+省略すると待機が即座に返って無意味になる。
+
+バックグラウンド実行は herdr ではなく **coordinator を動かしているハーネスの機能** である。
+使えない場合は従来どおりフォアグラウンドで待つ。その場合は `--timeout <ms>` を添えて、
+無応答の worker で止まり続けないようにする。
+
+これは手順 6 の「`--wait` は付けない」と矛盾しない。あちらは `agent start` の話で、
+全 worker を起動しきるまで待たないためのものである。こちらは起動しきった後の監視である。
+
+### 状態ごとの対処
 
 - `blocked` は承認待ちや質問。`agent read` で内容を読み、判断できるなら追加指示を prompt で返す。
   範囲や前提に関わる指示は、指示ファイルにも追記してから返す。
