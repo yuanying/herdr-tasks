@@ -82,6 +82,10 @@ mkdir -p "$TASK_DIR/notes/workers"
 会話の中で決まったことを省略せずに書き切る。
 
 - **タスク名 / ブランチ名**
+- **現在地** — **空の節として最初に置く。** ここは coordinator が埋める場所であり、
+  呼び出し元は枠と「この節が以下の本文より優先する」という一文だけを書く。
+  タスクが進むと本文の前提は決定に覆される。**覆した coordinator がここを直す**
+  （→ `coordinator.md`「記録を訂正する」）。枠が無いと、直す先が無いまま本文だけが古くなる。
 - **背景** — なぜこれをやるのか。会話で共有された前提。
 - **ゴール** — 完了時に何が成立していれば良いか。
 - **対象リポジトリ** — `ghq` のフルパスと、それぞれの担当範囲。未確定なら「調査対象」と明記する。
@@ -92,7 +96,15 @@ mkdir -p "$TASK_DIR/notes/workers"
 - **実行環境** — このスキルが置かれているディレクトリの絶対パス。coordinator と worker が
   手順書を読むために使う。workspace ID と agent kind は手順 5 の後に追記する。
 
-`$TASK_DIR/PROGRESS.md` は空で作る（coordinator が更新する）。
+タスクディレクトリの記録は **変更頻度で 3 つに分かれている**（→ `coordinator.md` 手順 3）。
+残る 2 つも、呼び出し元がここで用意する。
+
+- `$TASK_DIR/STATE.md` — **枠だけ作る。** 状態表の見出しと「次にやること」
+  「未解決の要判断」の見出しを置き、中身は空にする。coordinator が毎回上書きする。
+- `$TASK_DIR/PROGRESS.md` — 空で作る。日付つきの時系列で、coordinator が追記していく。
+
+**呼び出し元はどちらの中身も書かない。** STATE.md の状態表が空であることが、
+coordinator の新規開始判定の材料になる。
 
 タスクディレクトリに残したものが、coordinator の会話文脈が失われたときの唯一の手掛かりになる。
 会話でしか共有されていない前提は、ここで必ず書き出す。
@@ -233,9 +245,9 @@ herdr agent list
 herdr workspace list
 ```
 
-coordinator の agent がまだ生きているなら、プロンプトで `coordinator.md` と `PROGRESS.md` を
-読み直させるだけでよい。agent が失われている場合は、同じ workspace の root pane に同じ名前で
-起動し直す。pane が残っていれば新しい tab は作らない。
+coordinator の agent がまだ生きているなら、プロンプトで `coordinator.md` と
+`TASK.md` / `STATE.md` を読み直させるだけでよい。agent が失われている場合は、同じ workspace の
+root pane に同じ名前で起動し直す。pane が残っていれば新しい tab は作らない。
 
 ```bash
 herdr tab list --workspace "$WORKSPACE_ID"
@@ -247,11 +259,11 @@ TASK.md の「実行環境」と命名規則から決まる。
 ```bash
 herdr agent start "$COORD_NAME" --kind "$KIND" --pane "$ROOT_PANE"
 <スキルのパス>/scripts/prompt-agent.sh "$COORD_NAME" \
-  "あなたはこのタスクの coordinator です。これは中断からの再開です。まず <スキルのパス>/coordinator.md を読み、次に $TASK_DIR/TASK.md と $TASK_DIR/PROGRESS.md を読んで、再開判定の手順から始めてください。"
+  "あなたはこのタスクの coordinator です。これは中断からの再開です。まず <スキルのパス>/coordinator.md を読み、次に $TASK_DIR/TASK.md と $TASK_DIR/STATE.md を読んで、再開判定の手順から始めてください。"
 ```
 
 worker は coordinator と別プロセスなので、coordinator が落ちても生き続けていることがある。
-再開した coordinator が `herdr agent list` と PROGRESS.md を突き合わせて判断するため、
+再開した coordinator が `herdr agent list` と STATE.md を突き合わせて判断するため、
 呼び出し元やユーザーが worker を先に片付ける必要はない。
 
 ## ファイル
