@@ -25,8 +25,9 @@ task workspace
 
 ```
 ~/.local/state/herdr-tasks/<タスク名>/
-  ├─ TASK.md          仕様。coordinator が受け取る唯一の文脈
-  ├─ PROGRESS.md      リポジトリごとの状態表
+  ├─ TASK.md          仕様。coordinator が受け取る唯一の文脈（まれに変わる）
+  ├─ STATE.md         状態表・次にやること・未解決の要判断（毎回上書き）
+  ├─ PROGRESS.md      日付つきの時系列（追記のみ）
   ├─ notes/           判断の経緯
   │   └─ workers/     worker ごとの指示ファイル
   └─ worktrees/       worker の作業ツリー
@@ -42,6 +43,10 @@ task workspace
 - coordinator は worker の完了報告を鵜呑みにせず、`git log` / `git diff` とテストの再実行で自ら検証する。
 - coordinator の会話文脈が失われても、タスクディレクトリの記録から再開できる。worker への指示も
   ファイルに残るため、再開に呼び出し元の会話文脈は要らない。
+- 記録は **変更頻度で分けてある。** 再開時に必ず読むのは TASK.md と STATE.md の 2 つで、
+  伸び続ける PROGRESS.md は必要なときだけ日付で引く。
+- 記録は決定に覆されて古くなる。**覆した coordinator が、その場で記録を訂正する。**
+  古い記述は消さず、いまの前提を TASK.md の「現在地」に書いて優先させる。
 
 ## インストール
 
