@@ -5,8 +5,8 @@
 それをあなたが検証し終えるまでである。
 
 **PR を出すのは、その作業単位を担当した worker である**（→ ADR 0004）。あなたが代わりに
-出すのではない。あなた自身が実装を担当する 1 単位（→ 「5. 実行体制を決める」）についてだけ、
-`worker.md` の規律に従って自分で push し PR を出す。
+出すのではない。**あなたは実装しない。** 対象が 1 リポジトリでも worker を立てる
+（→ 「5. 実行体制を決める」）。
 
 **マージはユーザーの承認を得てから行う。** あなたは承認を取り次ぐ役であり、自分の判断で
 マージしない。worker にも同じ規約が課されている（→ `worker.md`）。
@@ -21,11 +21,15 @@ test "${HERDR_ENV:-}" = 1
 printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_PANE_ID"
 ```
 
-この `HERDR_WORKSPACE_ID` がタスク全体で共有する唯一の workspace である。自分の cwd が
-対象の git 作業ツリーかどうかも確認する。これが後の分岐に効く。
+この `HERDR_WORKSPACE_ID` がタスク全体で共有する唯一の workspace である。
+
+**あなたの cwd はタスクディレクトリであり、対象リポジトリの作業ツリーではない**（→ ADR 0005）。
+そこに `AGENTS.md` が無ければ、この規約より前に作られたタスクディレクトリである。
+TASK.md の「実行環境」にあるスキルのパスから生成してから先へ進む。次のあなたが、
+セッションをクリアされた先で手順書に戻れなくなる。
 
 ```bash
-git rev-parse --show-toplevel 2>/dev/null
+<スキルのパス>/scripts/write-task-agents.sh .
 ```
 
 ## 1. 新規開始か再開かを判定する
@@ -103,6 +107,9 @@ worker を立て直す前に、**その worktree の現状を手順 8 の方法�
 | `TASK.md` | ゴール・制約・実行環境と、覆った前提の訂正（「現在地」節） | まれ | 必ず読む |
 | `STATE.md` | 状態表・次にやること・未解決の要判断 | **毎回上書き** | 必ず読む |
 | `PROGRESS.md` | 日付つきの時系列 | **追記のみ** | 必要なときだけ |
+
+この 3 つのほかに `AGENTS.md` と `CLAUDE.md` が置いてあるが、これは記録ではなく、
+**会話文脈を失った agent を手順書へ戻すための入口**である（→ ADR 0005）。進捗を書き込まない。
 
 頻度で切るのは、**必ず読む 2 つを小さいまま保つため**である。毎回書き換わるものを追記しか
 しないファイルの中に置くと、全体が伸び続け、「先頭だけ読む」という規約に読み手の規律を
@@ -207,12 +214,9 @@ ghq list --full-path
 
 ## 5. 実行体制を決める
 
-- **自分の cwd が対象リポジトリの worktree** → その 1 リポジトリだけは coordinator が
-  自分で実装してよい。実装の規律は `worker.md` に従う。
-- **自分の cwd が git 作業ツリーでない、または対象が自分のリポジトリ以外** →
-  対象が 1 つでも必ず、そのリポジトリの worktree tab と worker を作る。coordinator が
-  対象リポジトリへ `cd` して実装してはならない。
-- **対象が複数** → coordinator が担当する 1 リポジトリを除き、リポジトリごとに worker tab を立てる。
+**あなたは実装しない**（→ ADR 0005）。対象が 1 リポジトリでも、それが呼び出し元のリポジトリでも、
+必ず worktree tab と worker を作る。対象リポジトリへ `cd` して自分で書いてはならない。
+分けるのは作業単位であり、単位ごとに 1 PR・1 worker である（→ ADR 0004）。
 
 worker tab はすべて coordinator と同じ `HERDR_WORKSPACE_ID` に作る。タスクのために
 追加の workspace を作ってはならない。
@@ -258,6 +262,9 @@ herdr agent start "$WORKER_NAME" --kind "$KIND" --pane <tab create 応答の .re
 - `--kind` は TASK.md の「実行環境」に記録された kind を使う。TASK.md に指定があればそれに従う。
 - `tab_id` と `root_pane.pane_id` は `tab create` の応答 JSON から読む。推測しない。得た ID は
   すぐ `STATE.md` の該当行に埋める。
+- worker の worktree は `$TASK_DIR/worktrees/` の下に作る。タスクディレクトリの `AGENTS.md` /
+  `CLAUDE.md` が親として読み込まれ、セッションを失った worker が自分で `worker.md` と
+  指示ファイルへ戻れる（→ ADR 0005）。**対象リポジトリの中にこれらを置いてはならない。**
 - 同名リポジトリは worktree path と tab ラベルが衝突しないよう owner などを加える。
 - 再開時に worktree が既に存在する場合は、パス・branch・対象 repository が一致することを
   確認して再利用する。branch だけが既に存在する場合は、その履歴がタスクの意図と一致することを
@@ -344,6 +351,8 @@ worker が終わったのに coordinator が「作業中」のまま待ち続け
 
 ### 状態ごとの対処
 
+- 担当を忘れている、別のことを始めた、idle のまま動かない —— これらは worker がセッションを
+  失った兆候である。指示ファイルのパスをもう一度 prompt で渡せば戻る。立て直す前にまず疑う。
 - `blocked` は承認待ちや質問。`agent read` で内容を読み、判断できるなら追加指示を prompt で返す。
   範囲や前提に関わる指示は、指示ファイルにも追記してから返す。
 - 応答が代替画面に隠れて読み取れない場合は、worker に「回答を一時ファイルに書いてパスだけ返せ」と
@@ -416,10 +425,8 @@ git -C "$REPO_PATH" worktree remove "$WORKTREE_PATH"
 
 閉じた単位の行は `STATE.md` の状態表から落とす。`STATE.md` はいまの姿だけを映す。
 
-worker tab と worktree を順に片付け、最後に coordinator workspace を閉じる。coordinator が
-linked worktree 上にいる場合は `herdr worktree remove --workspace "$HERDR_WORKSPACE_ID"`、
-TASK_DIR 上の通常 workspace なら `herdr workspace close "$HERDR_WORKSPACE_ID"` で閉じる。
-ブランチとコミットは残す。
+worker tab と worktree を順に片付け、最後に `herdr workspace close "$HERDR_WORKSPACE_ID"` で
+coordinator workspace を閉じる。ブランチとコミットは残す。
 タスクディレクトリも残す。
 
 ### PROGRESS.md を刈る
