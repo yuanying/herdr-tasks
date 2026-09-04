@@ -22,14 +22,15 @@ coordinator がそれらを取りまとめる。
 | 役割 | 居場所 | 責任 |
 |---|---|---|
 | 呼び出し元 | 現在の pane | タスク仕様書を書き、coordinator を起動し、起動報告をして手を引く |
-| coordinator | タスク専用 workspace の root tab | タスク完遂までの責任。worker の起動・監視・検証・取りまとめ |
+| coordinator | タスク専用 workspace の root tab（cwd はタスクディレクトリ） | タスク完遂までの責任。worker の起動・監視・検証・取りまとめ |
 | worker | 同じ workspace 内の作業単位ごとの worktree tab | その作業単位の実装・テスト・コミット |
 
-- 呼び出し元のリポジトリが対象リポジトリに含まれる場合だけ、coordinator は自分の worktree を担当できる。
-- 呼び出し元と作業対象のリポジトリが異なる場合は、対象が 1 つでも必ず対象リポジトリの
-  worktree tab と worker を作る。
+- **coordinator は実装しない。** 呼び出し元のリポジトリが対象に含まれていても、対象が 1 つでも、
+  必ず対象リポジトリの worktree tab と worker を作る（→ ADR 0005）。
 - 対象が複数の場合も workspace は増やさず、同じタスク workspace にリポジトリ別 tab を追加する。
 - coordinator と worker は別プロセスであり、会話文脈は引き継がれない。渡せるのは **ファイルのパス** だけである。
+- **手順書へ戻る道はタスクディレクトリの `AGENTS.md` / `CLAUDE.md` が持つ。** 会話文脈を失った
+  agent が、次のセッションの開始時にそれを読んで自分で手順書へ戻る（→ ADR 0005）。
 - **worker は 1 PR の単位で立てて、その単位が終わったら閉じる。** 使い回さない（→ ADR 0004）。
 
 ## 前提条件
@@ -109,6 +110,18 @@ coordinator の新規開始判定の材料になる。
 タスクディレクトリに残したものが、coordinator の会話文脈が失われたときの唯一の手掛かりになる。
 会話でしか共有されていない前提は、ここで必ず書き出す。
 
+記録を置いても、**それを読む理由が失われれば同じことである。** セッションをクリアした
+coordinator や worker は、手順書のパスをプロンプトで受け取ったこと自体を忘れている。
+タスクディレクトリに入口を置き、次のセッションの開始時に自動で読ませる。
+
+```bash
+<スキルのパス>/scripts/write-task-agents.sh "$TASK_DIR"
+```
+
+`$TASK_DIR/AGENTS.md`（役割の見分け方と読むべき手順書）と、それを `@` で読み込むだけの
+`$TASK_DIR/CLAUDE.md` を生成する。worker の worktree はこのディレクトリの下に作るため、
+同じファイルが worker にも届く。何度実行してもよい。手で書かれた同名ファイルは上書きしない。
+
 ### 3. 対象リポジトリを特定する
 
 ```bash
@@ -120,27 +133,15 @@ ghq list --full-path
 
 ### 4. coordinator workspace を作る
 
-手順 3 で確定した対象リポジトリと、呼び出し元のリポジトリを比較する。
-
-**呼び出し元のリポジトリが対象に含まれる場合** — そのリポジトリの worktree を
-coordinator の root tab にする。coordinator はこのリポジトリを担当できる。
-
-```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-git -C "$REPO_ROOT" fetch origin        # remote がある場合
-herdr worktree create --cwd "$REPO_ROOT" --branch "$BRANCH" --base <デフォルトブランチの最新> \
-  --label "$TASK_NAME" --no-focus
-```
-
-**呼び出し元がリポジトリ外、または呼び出し元のリポジトリが対象外の場合** —
-無関係なリポジトリの worktree を作らず、タスクディレクトリを cwd とする coordinator
-workspace を作る。この場合、対象が 1 リポジトリでも coordinator は実装せず worker tab を作る。
+**cwd は常にタスクディレクトリである。** 呼び出し元のリポジトリが対象に含まれていても、
+そのリポジトリの worktree を coordinator の root tab にしない。coordinator は実装せず、
+対象リポジトリは 1 つでも worker が担当する（→ ADR 0005）。
 
 ```bash
 herdr workspace create --cwd "$TASK_DIR" --label "$TASK_NAME" --no-focus
 ```
 
-いずれも応答 JSON から `.result.workspace.workspace_id` と `.result.root_pane.pane_id` を読む。
+応答 JSON から `.result.workspace.workspace_id` と `.result.root_pane.pane_id` を読む。
 ID は応答から取る。推測しない。
 
 ### 5. agent kind を決める
@@ -238,6 +239,10 @@ worktree と完全一致することを確認する。一致した場合だけ�
 会話文脈は必要ない。** 再開に必要な事実はすべてタスクディレクトリのファイルに書かれている
 （→ ADR 0003）。
 
+**セッションをクリアしただけなら、coordinator は自分で手順書へ戻る。** タスクディレクトリの
+`AGENTS.md` / `CLAUDE.md` が新しいセッションの開始時に読み込まれ、役割と手順書のパスは
+そこにある（→ ADR 0005）。以下は、agent プロセスそのものが失われた場合の手順である。
+
 まず現状を確認する。workspace とタスクディレクトリのパスは TASK.md の「実行環境」にある。
 
 ```bash
@@ -273,4 +278,6 @@ worker は coordinator と別プロセスなので、coordinator が落ちても
 - `worker.md` — worker が読む手順書。
 - `scripts/install-skill.sh` — `~/.agents/skills` と `~/.claude/skills` に symlink を張る。
 - `scripts/prompt-agent.sh` — agent の入力待ち・trust 停止・プロンプト着弾を判定する。
+- `scripts/write-task-agents.sh` — タスクディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する。
+- `templates/task-agents.md` — 生成される `AGENTS.md` の元になる雛形。
 - `docs/adr/` — 設計判断の記録。

@@ -16,7 +16,7 @@ herdr の workspace / worktree を使って、与えられたタスクを
   │  タスク仕様書を書き、coordinator を起動して手を引く
   ▼
 task workspace
-  ├─ coordinator root tab
+  ├─ coordinator root tab (タスクディレクトリ)
   ├─ worker tab (リポジトリ A の worktree)
   └─ worker tab (リポジトリ B の worktree)
 ```
@@ -25,6 +25,8 @@ task workspace
 
 ```
 ~/.local/state/herdr-tasks/<タスク名>/
+  ├─ AGENTS.md        役割の見分け方と読むべき手順書。セッション開始時に読み込まれる
+  ├─ CLAUDE.md        AGENTS.md を @ で読み込むだけ
   ├─ TASK.md          仕様。coordinator が受け取る唯一の文脈（まれに変わる）
   ├─ STATE.md         状態表・次にやること・未解決の要判断（毎回上書き）
   ├─ PROGRESS.md      日付つきの時系列（追記のみ）
@@ -33,8 +35,8 @@ task workspace
   └─ worktrees/       worker の作業ツリー
 ```
 
-- 呼び出し元と作業対象が同じリポジトリの場合だけ、coordinator がその worktree を担当できる。
-- 呼び出し元と作業対象が異なる場合は、対象が 1 リポジトリでも必ず worker tab を作る。
+- coordinator の cwd は常にタスクディレクトリであり、**coordinator は実装しない。**
+  対象が 1 リポジトリでも、それが呼び出し元のリポジトリでも、必ず worker tab を作る。
 - 複数リポジトリでも workspace は増やさず、リポジトリ別 tab としてまとめる。
 - coordinator と worker は別プロセスであり、会話文脈は引き継がれない。渡せるのはファイルのパスだけである。
   そのためタスク仕様書 `TASK.md` の質がそのままタスクの成否を左右する。
@@ -43,6 +45,9 @@ task workspace
 - coordinator は worker の完了報告を鵜呑みにせず、`git log` / `git diff` とテストの再実行で自ら検証する。
 - coordinator の会話文脈が失われても、タスクディレクトリの記録から再開できる。worker への指示も
   ファイルに残るため、再開に呼び出し元の会話文脈は要らない。
+- **記録への入口もタスクディレクトリに置く。** `AGENTS.md` と、それを読み込むだけの `CLAUDE.md` を
+  置いてあるため、セッションをクリアされた coordinator と worker は、次のセッションの開始時に
+  自分で役割を確かめて手順書へ戻る。worker の worktree もこのディレクトリの下にある。
 - 記録は **変更頻度で分けてある。** 再開時に必ず読むのは TASK.md と STATE.md の 2 つで、
   伸び続ける PROGRESS.md は必要なときだけ日付で引く。
 - 記録は決定に覆されて古くなる。**覆した coordinator が、その場で記録を訂正する。**
@@ -80,6 +85,8 @@ herdr agent attach <coordinator の agent 名>
 | `worker.md` | worker が読む手順書 |
 | `scripts/install-skill.sh` | symlink を張る |
 | `scripts/prompt-agent.sh` | agent の入力待ちとプロンプト着弾を判定する |
+| `scripts/write-task-agents.sh` | タスクディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する |
+| `templates/task-agents.md` | 生成される `AGENTS.md` の雛形 |
 | `docs/adr/` | 設計判断の記録 |
 
 ## 命名規則

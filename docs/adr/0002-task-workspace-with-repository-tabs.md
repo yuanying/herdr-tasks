@@ -1,7 +1,8 @@
 # 0002. 1 タスクを 1 workspace とし、作業リポジトリを tab にまとめる
 
 - Date: 2026-08-19
-- Status: Accepted
+- Status: Accepted（coordinator の cwd に関する決定は
+  [ADR 0005](0005-task-directory-entry-point.md) が改めている）
 
 ## Context
 
@@ -20,6 +21,7 @@ Herdr は任意の cwd を持つ tab を既存 workspace に追加できる。wo
 - coordinator は task workspace の root tab に置く。
 - 呼び出し元リポジトリが対象リポジトリに含まれる場合だけ、その worktree を coordinator
   の cwd とし、coordinator が担当できる。
+  （ADR 0005 で改定。coordinator の cwd は常に TASK_DIR とし、coordinator は実装しない）
 - 呼び出し元が対象外の場合は TASK_DIR を coordinator の cwd とする。対象が 1 リポジトリでも、
   対象リポジトリの worktree tab と worker を必ず作る。
 - worker worktree は `$TASK_DIR/worktrees/<リポジトリ名>` に作る。
