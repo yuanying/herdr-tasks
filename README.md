@@ -86,7 +86,8 @@ cd "$(ghq root)/github.com/yuanying/herdr-tasks"
 ./scripts/install-skill.sh
 ```
 
-`~/.agents/skills/herdr-tasks` と `~/.claude/skills/herdr-tasks` にこのリポジトリへの symlink を張る。
+`~/.agents/skills` と `~/.claude/skills` に 2 つのスキルの symlink を張る。
+`herdr-tasks` はこのリポジトリ、`herdr-supervisor` は同梱の `skills/herdr-supervisor/` を指す。
 既にある場合は何もしない。別の実体が置かれている場合は、何も変更せずに中止する。
 
 ## 使い方
@@ -101,8 +102,8 @@ herdr agent list
 herdr agent attach <coordinator の agent 名>
 ```
 
-全タスクをまとめて見たいときは、`herdr-tasks` スキルで supervisor を立てるよう伝え、
-以降は supervisor に「いまの状況は？」と聞く。新しいタスクも supervisor に頼めば、
+全タスクをまとめて見たいときは「supervisor を起動して」と伝える（`herdr-supervisor` スキル）。
+すでに起動していれば、その workspace を教えてくれる。以降は supervisor に「いまの状況は？」と聞く。新しいタスクも supervisor に頼めば、
 タスク横断の関係を洗ったうえで起動する。
 
 ```bash
@@ -117,7 +118,8 @@ herdr agent attach supervisor
 | `coordinator.md` | coordinator が読む手順書 |
 | `worker.md` | worker が読む手順書 |
 | `supervisor.md` | supervisor が読む手順書 |
-| `scripts/install-skill.sh` | symlink を張る |
+| `skills/herdr-supervisor/SKILL.md` | supervisor を起動する別スキル。起動済みならその workspace を案内する |
+| `scripts/install-skill.sh` | `herdr-tasks` と `herdr-supervisor` の symlink を張る |
 | `scripts/prompt-agent.sh` | agent の入力待ちとプロンプト着弾を判定する |
 | `scripts/write-task-agents.sh` | タスクディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する |
 | `scripts/write-supervisor-agents.sh` | supervisor ディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する |

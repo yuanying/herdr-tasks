@@ -108,6 +108,20 @@ herdr-tasks は 1 タスク = 1 workspace で coordinator を常駐させる（A
   だけである。coordinator に引き渡した後は書かない。タスク横断の情報は coordinator に
   取り次ぎ、記録するかどうかは coordinator が決める。
 
+### 8. 起動は別スキル `herdr-supervisor` に分ける
+
+- supervisor の起動手順は、同じリポジトリの `skills/herdr-supervisor/SKILL.md` に置く。
+  herdr-tasks の `SKILL.md` には、`STATE.md` の枠の状態行と、supervisor への参照だけを残す。
+- 理由の 1 つ目は、**herdr-tasks の `SKILL.md` を通常のタスク向けに保つ** ためである。
+  起動手順・固定の名前・supervisor 用ファイルの一覧は、ふつうのタスクを立てるときには要らない。
+  それでも `SKILL.md` に置けば、herdr-tasks スキルが読まれるたびに文脈に載る。
+- 2 つ目は、**独立したトリガーで起動と案内を行う** ためである。ユーザーは「supervisor を起動して」
+  と言えば起動し、すでに起動していればその workspace を教えてもらう形で使いたい。
+  これはタスクを立てる herdr-tasks とは別の使用場面であり、別の description が要る。
+- スクリプトと `supervisor.md` は herdr-tasks 側の 1 つを共有する。別スキルは自分の置き場を
+  `cd -P` で実体へ解決してから `../..` に上がり、herdr-tasks リポジトリを見つける。
+  `scripts/install-skill.sh` は `skills/*` も symlink する。
+
 ## Consequences
 
 - ユーザーは supervisor に聞くだけで、全タスクの状態と、タスクをまたぐ関係を一度に見られる。
@@ -122,5 +136,7 @@ herdr-tasks は 1 タスク = 1 workspace で coordinator を常駐させる（A
   取り次がれた情報を記録するのは coordinator であり、記録しなければタスクには残らない。
 - 状態行の値は 4 つに固定した。「マージ待ち」や「片付け待ち」は値に持たせず、
   一覧の要点に書く。値を増やすと、coordinator が直し忘れる遷移が増える。
+- スキルが 2 つになり、インストールは両方を張る。`herdr-supervisor` は herdr-tasks リポジトリの
+  中に置いてあることが前提であり、単独で配ると動かない。
 - 入口の生成処理を共有したため、マーカー行の形式を変えるときは 2 つの入口に同時に効く。
   既存の生成物との互換を壊さないよう、マーカーの先頭は変えない。
