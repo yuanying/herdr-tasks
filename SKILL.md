@@ -15,6 +15,9 @@ root tab に常駐する **coordinator** にタスク完遂までの責任を持
 同じ workspace 内へリポジトリ別の worktree tab を作って **worker** を立て、
 coordinator がそれらを取りまとめる。
 
+全タスクを束ねる **supervisor** は別スキル `herdr-supervisor`（同リポジトリの
+`skills/herdr-supervisor/`）で起動する。手順書は `supervisor.md` にある（→ ADR 0006）。
+
 このスキルは特定の Coding Agent に依存しない。`herdr` CLI と `git`、`ghq` があれば動く。
 
 ## 役割
@@ -100,12 +103,27 @@ mkdir -p "$TASK_DIR/notes/workers"
 タスクディレクトリの記録は **変更頻度で 3 つに分かれている**（→ `coordinator.md` 手順 3）。
 残る 2 つも、呼び出し元がここで用意する。
 
-- `$TASK_DIR/STATE.md` — **枠だけ作る。** 状態表の見出しと「次にやること」
-  「未解決の要判断」の見出しを置き、中身は空にする。coordinator が毎回上書きする。
+- `$TASK_DIR/STATE.md` — **枠だけ作る。** 1 行目に状態行 `状態: 進行中` を置き、
+  続けて状態表の見出しと「次にやること」「未解決の要判断」の見出しを置き、中身は空にする。
+  coordinator が毎回上書きする。
 - `$TASK_DIR/PROGRESS.md` — 空で作る。日付つきの時系列で、coordinator が追記していく。
 
-**呼び出し元はどちらの中身も書かない。** STATE.md の状態表が空であることが、
-coordinator の新規開始判定の材料になる。
+```markdown
+状態: 進行中
+
+# STATE
+
+## 状態表
+
+## 次にやること
+
+## 未解決の要判断
+```
+
+**呼び出し元は状態行のほかに中身を書かない。** STATE.md の状態表が空であることが、
+coordinator の新規開始判定の材料になる。状態行は、タスクの外から状態を機械的に読むための
+1 行であり、以降は coordinator が更新する（→ `coordinator.md` 手順 3「状態行」）。
+起動した直後から一覧に「進行中」として載せるため、最初の値は呼び出し元が入れる。
 
 タスクディレクトリに残したものが、coordinator の会話文脈が失われたときの唯一の手掛かりになる。
 会話でしか共有されていない前提は、ここで必ず書き出す。
@@ -276,7 +294,8 @@ worker は coordinator と別プロセスなので、coordinator が落ちても
 - `SKILL.md` — このファイル。呼び出し元の手順と全体像。
 - `coordinator.md` — coordinator が読む手順書。
 - `worker.md` — worker が読む手順書。
-- `scripts/install-skill.sh` — `~/.agents/skills` と `~/.claude/skills` に symlink を張る。
+- `supervisor.md` — supervisor が読む手順書（起動は `skills/herdr-supervisor/SKILL.md`）。
+- `scripts/install-skill.sh` — このスキルと `skills/*` を `~/.agents/skills` と `~/.claude/skills` に symlink する。
 - `scripts/prompt-agent.sh` — agent の入力待ち・trust 停止・プロンプト着弾を判定する。
 - `scripts/write-task-agents.sh` — タスクディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する。
 - `templates/task-agents.md` — 生成される `AGENTS.md` の元になる雛形。
