@@ -15,6 +15,10 @@ root tab に常駐する **coordinator** にタスク完遂までの責任を持
 同じ workspace 内へリポジトリ別の worktree tab を作って **worker** を立て、
 coordinator がそれらを取りまとめる。
 
+タスクが増えたら、全タスクを束ねる **supervisor** を 1 つだけ常駐させる
+（→ 「supervisor を起動する」）。supervisor は聞かれたときに全タスクの一覧を作り、
+タスクをまたぐ依存・衝突・申し送りを管理する。
+
 このスキルは特定の Coding Agent に依存しない。`herdr` CLI と `git`、`ghq` があれば動く。
 
 ## 役割
@@ -24,6 +28,7 @@ coordinator がそれらを取りまとめる。
 | 呼び出し元 | 現在の pane | タスク仕様書を書き、coordinator を起動し、起動報告をして手を引く |
 | coordinator | タスク専用 workspace の root tab（cwd はタスクディレクトリ） | タスク完遂までの責任。worker の起動・監視・検証・取りまとめ |
 | worker | 同じ workspace 内の作業単位ごとの worktree tab | その作業単位の実装・テスト・コミット |
+| supervisor | 専用 workspace `herdr-supervisor`（cwd は supervisor ディレクトリ） | 全タスクの一覧化とタスク横断の管理。新規タスクの起動（呼び出し元を担う）と介入（どちらもユーザー確認後） |
 
 - **coordinator は実装しない。** 呼び出し元のリポジトリが対象に含まれていても、対象が 1 つでも、
   必ず対象リポジトリの worktree tab と worker を作る（→ ADR 0005）。
@@ -32,6 +37,8 @@ coordinator がそれらを取りまとめる。
 - **手順書へ戻る道はタスクディレクトリの `AGENTS.md` / `CLAUDE.md` が持つ。** 会話文脈を失った
   agent が、次のセッションの開始時にそれを読んで自分で手順書へ戻る（→ ADR 0005）。
 - **worker は 1 PR の単位で立てて、その単位が終わったら閉じる。** 使い回さない（→ ADR 0004）。
+- **supervisor も実装しない。** worker には直接触らず、coordinator の代わりに判断せず、
+  マージもしない。監視はユーザーに聞かれたときだけ行う（→ ADR 0006、`supervisor.md`）。
 
 ## 前提条件
 
@@ -55,6 +62,9 @@ test "${HERDR_ENV:-}" = 1
 | タスクディレクトリ | `~/.local/state/herdr-tasks/<タスク名>/` | |
 | coordinator agent 名 | `coord-` + 短縮 | `coord-42-add-retry` |
 | worker agent 名 | `work-` + 作業単位のブランチ名 | `work-add-retry` |
+| supervisor workspace ラベル | 固定 | `herdr-supervisor` |
+| supervisor agent 名 | 固定 | `supervisor` |
+| supervisor ディレクトリ | `~/.local/state/herdr-supervisor/`（推奨） | |
 
 - slug は英小文字・数字・ハイフンで、タスク内容が読み取れる 3〜5 語程度にする。
 - ブランチ名に `#` は使わない。ディレクトリ名と workspace ラベルには使う（シェルでは必ずクォートする）。
@@ -100,12 +110,27 @@ mkdir -p "$TASK_DIR/notes/workers"
 タスクディレクトリの記録は **変更頻度で 3 つに分かれている**（→ `coordinator.md` 手順 3）。
 残る 2 つも、呼び出し元がここで用意する。
 
-- `$TASK_DIR/STATE.md` — **枠だけ作る。** 状態表の見出しと「次にやること」
-  「未解決の要判断」の見出しを置き、中身は空にする。coordinator が毎回上書きする。
+- `$TASK_DIR/STATE.md` — **枠だけ作る。** 1 行目に状態行 `状態: 進行中` を置き、
+  続けて状態表の見出しと「次にやること」「未解決の要判断」の見出しを置き、中身は空にする。
+  coordinator が毎回上書きする。
 - `$TASK_DIR/PROGRESS.md` — 空で作る。日付つきの時系列で、coordinator が追記していく。
 
-**呼び出し元はどちらの中身も書かない。** STATE.md の状態表が空であることが、
-coordinator の新規開始判定の材料になる。
+```markdown
+状態: 進行中
+
+# STATE
+
+## 状態表
+
+## 次にやること
+
+## 未解決の要判断
+```
+
+**呼び出し元は状態行のほかに中身を書かない。** STATE.md の状態表が空であることが、
+coordinator の新規開始判定の材料になる。状態行は、タスクの外から状態を機械的に読むための
+1 行であり、以降は coordinator が更新する（→ `coordinator.md` 手順 3「状態行」）。
+起動した直後から一覧に「進行中」として載せるため、最初の値は呼び出し元が入れる。
 
 タスクディレクトリに残したものが、coordinator の会話文脈が失われたときの唯一の手掛かりになる。
 会話でしか共有されていない前提は、ここで必ず書き出す。
@@ -186,6 +211,75 @@ herdr agent start "$COORD_NAME" --kind "$KIND" --pane "$ROOT_PANE"
 - すべての worker が同じ workspace のリポジトリ別 tab に作られる旨
 
 以降の進捗は coordinator が持つ。呼び出し元はこのタスクを監視しない。
+全タスクの様子をまとめて見たいときは、supervisor に聞く。
+
+## supervisor を起動する
+
+タスクが増えると、どれが走っていて、どれが判断待ちで、どれが止まっているかを一望できなくなる。
+タスク同士の関係（あるタスクが別タスクの PR を待つ、複数のタスクが同じリポジトリを触る）を
+置く場所も無い。各 coordinator は自分のタスクしか見ていないからである。
+これを受け持つのが supervisor である（→ ADR 0006）。手順は `supervisor.md` にある。
+
+**supervisor は全体で 1 つだけ立てる。** 起動を頼まれた agent が、次を行う。
+
+### 1. 既に居ないか確かめる
+
+```bash
+herdr workspace list
+herdr agent list
+```
+
+ラベル `herdr-supervisor` の workspace、または名前 `supervisor` の agent があれば、
+新しく立てない。agent が生きていればそれを使う。workspace だけが残っていれば、
+`herdr tab list --workspace <その workspace ID>` で root pane を読み、そこに手順 4 の
+`herdr agent start` から起動し直す。
+
+### 2. 専用ディレクトリを作る
+
+```bash
+SUPERVISOR_DIR="$HOME/.local/state/herdr-supervisor"
+mkdir -p "$SUPERVISOR_DIR"
+```
+
+**タスクディレクトリの親（`~/.local/state/herdr-tasks/`）の中には作らない。** supervisor は
+そこを走査して一覧を作るため、中に置くと自分自身がタスクとして混ざる。
+既にディレクトリがあれば、前の supervisor の記録が残っている。消さずにそのまま使う。
+
+### 3. 入口を置く
+
+```bash
+<スキルのパス>/scripts/write-supervisor-agents.sh "$SUPERVISOR_DIR"
+```
+
+`$SUPERVISOR_DIR/AGENTS.md`（supervisor が読むべき手順書と、全タスクディレクトリの親のパス）と、
+それを `@` で読み込むだけの `CLAUDE.md` を生成する。タスクディレクトリの入口と同じく、
+セッションをクリアされた supervisor が自分で手順書へ戻るためのものである（→ ADR 0005）。
+タスクディレクトリの親が既定と違うなら、第 2 引数に絶対パスで渡す。
+何度実行してもよい。手で書かれた同名ファイルは上書きしない。
+
+### 4. workspace を作って起動する
+
+```bash
+herdr workspace create --cwd "$SUPERVISOR_DIR" --label herdr-supervisor --no-focus
+herdr agent start supervisor --kind "$KIND" --pane "$ROOT_PANE"
+```
+
+`$ROOT_PANE` は `workspace create` の応答の `.result.root_pane.pane_id` から読む。推測しない。
+`$KIND` の決め方は「呼び出し元の手順」5 と同じである。
+
+### 5. 手順書を渡す
+
+```bash
+<スキルのパス>/scripts/prompt-agent.sh supervisor \
+  "あなたは herdr-tasks の supervisor です。まず <スキルのパス>/supervisor.md を読み、手順 0 の前提確認を済ませてから、ユーザーの依頼を待ってください。"
+```
+
+exit 2 の場合は「プロンプトの着弾を確認する」の trust 確認手順に従う。cwd が今作った
+`$SUPERVISOR_DIR` と一致する場合だけ承認する。
+
+フォーカスは移さない。supervisor の agent 名（`herdr agent attach supervisor` で覗ける旨）と
+ディレクトリのパスをユーザーに伝えて終わる。supervisor は起動しただけでは何もせず、
+ユーザーに聞かれてから一覧を作る。
 
 ## プロンプトの着弾を確認する
 
@@ -276,8 +370,12 @@ worker は coordinator と別プロセスなので、coordinator が落ちても
 - `SKILL.md` — このファイル。呼び出し元の手順と全体像。
 - `coordinator.md` — coordinator が読む手順書。
 - `worker.md` — worker が読む手順書。
+- `supervisor.md` — supervisor が読む手順書。
 - `scripts/install-skill.sh` — `~/.agents/skills` と `~/.claude/skills` に symlink を張る。
 - `scripts/prompt-agent.sh` — agent の入力待ち・trust 停止・プロンプト着弾を判定する。
 - `scripts/write-task-agents.sh` — タスクディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する。
-- `templates/task-agents.md` — 生成される `AGENTS.md` の元になる雛形。
+- `scripts/write-supervisor-agents.sh` — supervisor ディレクトリに `AGENTS.md` / `CLAUDE.md` を生成する。
+- `scripts/lib/agents-entry.sh` — 上の 2 つが共有する入口生成の処理（手書きファイルを上書きしない判定）。
+- `templates/task-agents.md` — タスクディレクトリに生成される `AGENTS.md` の雛形。
+- `templates/supervisor-agents.md` — supervisor ディレクトリに生成される `AGENTS.md` の雛形。
 - `docs/adr/` — 設計判断の記録。
