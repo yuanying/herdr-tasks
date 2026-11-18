@@ -98,7 +98,7 @@ mkdir -p "$TASK_DIR/notes/workers"
 - **完了条件** — 通すべきテストコマンドを具体的に書く。
 - **参考情報** — issue URL、関連ファイル、既存の議論、ADR。
 - **実行環境** — このスキルが置かれているディレクトリの絶対パス。coordinator と worker が
-  手順書を読むために使う。workspace ID と agent kind は手順 5 の後に追記する。
+  手順書を読むために使う。workspace ID・root pane ID・agent kind は手順 5 の後に追記する。
 
 タスクディレクトリの記録は **変更頻度で 3 つに分かれている**（→ `coordinator.md` 手順 3）。
 残る 2 つも、呼び出し元がここで用意する。
@@ -167,8 +167,8 @@ ID は応答から取る。推測しない。
 既定は呼び出し元と同じ kind。`herdr agent list` の中から `pane_id` が `$HERDR_PANE_ID` の
 エントリを探し、その `agent` を使う。ユーザーから指定があればそれを優先する。
 
-決めた kind と、手順 4 の応答から得た workspace ID を TASK.md の「実行環境」に追記する。
-coordinator が停止しても、この記述だけで worker を同じ kind・同じ workspace に立て直せる。
+決めた kind と、手順 4 の応答から得た workspace ID・root pane ID を TASK.md の「実行環境」に
+追記する。coordinator が停止しても、この記述を起点に workspace と agent を立て直せる。
 
 ### 6. coordinator を起動する
 
@@ -268,16 +268,19 @@ herdr agent list
 herdr workspace list
 ```
 
-coordinator の agent がまだ生きているなら、プロンプトで `coordinator.md` と
-`TASK.md` / `STATE.md` を読み直させるだけでよい。agent が失われている場合は、同じ workspace の
-root pane に同じ名前で起動し直す。pane が残っていれば新しい tab は作らない。
+- **coordinator が生きている**: プロンプトで `coordinator.md` と `TASK.md` / `STATE.md` を
+  読み直させるだけでよい。起動し直さない。
+- **agent はいないが workspace はある**: `herdr pane list --workspace "$WORKSPACE_ID"` で
+  記録した root pane が残っていることと、cwd がタスクディレクトリであることを確かめる。
+  root pane の記録がなければ、root tab と cwd から特定する。応答の `pane_id` を `ROOT_PANE` とし、
+  新しい tab は作らない。
+- **workspace がない**: 「呼び出し元の手順」4 に従い、既存のタスクディレクトリを cwd に、タスク名を
+  ラベルにして workspace を作り直す。新しい workspace ID と `ROOT_PANE` は作成時の応答から取る。
 
-```bash
-herdr tab list --workspace "$WORKSPACE_ID"
-```
-
-応答から coordinator の tab の `root_pane.pane_id` を読む。`$COORD_NAME` と `$KIND` は
-TASK.md の「実行環境」と命名規則から決まる。
+agent を起動し直す場合は、下のコマンドを使う。`$COORD_NAME` と `$KIND` は TASK.md の
+「実行環境」と命名規則から決まる。workspace を作り直した場合は、再開のプロンプトに
+新しい workspace ID と root pane ID を添え、**再開判定の前に TASK.md の「実行環境」の両方の値を
+更新する**よう指示する。TASK.md を直すのは再開した coordinator である。
 
 ```bash
 herdr agent start "$COORD_NAME" --kind "$KIND" --pane "$ROOT_PANE"
