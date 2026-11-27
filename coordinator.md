@@ -16,6 +16,11 @@
 
 ## 0. 前提の確認
 
+`TASK.md` の「実行環境」に `- poteto-mode: 有効` がある場合は、起動・再開時に
+`~/.agents/skills/poteto-mode/SKILL.md` と、この手順書に同梱の
+[`harness/poteto-mode.md`](harness/poteto-mode.md) を読む。その連携規則を以降の手順に適用する。
+どちらかが読めなければその旨を報告し、従来モードに黙って切り替えない。行が無ければ従来どおり進める。
+
 ```bash
 test "${HERDR_ENV:-}" = 1
 printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_PANE_ID"

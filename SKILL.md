@@ -99,6 +99,9 @@ mkdir -p "$TASK_DIR/notes/workers"
 - **参考情報** — issue URL、関連ファイル、既存の議論、ADR。
 - **実行環境** — このスキルが置かれているディレクトリの絶対パス。coordinator と worker が
   手順書を読むために使う。workspace ID・root pane ID・agent kind は手順 5 の後に追記する。
+  ユーザーがこのタスクを poteto-mode で進めるよう指定した場合だけ、この節に
+  `- poteto-mode: 有効` を 1 行追加する。指定が無ければ行ごと省略する。有効化する前に
+  `~/.agents/skills/poteto-mode/SKILL.md` が読めることを確かめる。
 
 タスクディレクトリの記録は **変更頻度で 3 つに分かれている**（→ `coordinator.md` 手順 3）。
 残る 2 つも、呼び出し元がここで用意する。
@@ -297,6 +300,7 @@ worker は coordinator と別プロセスなので、coordinator が落ちても
 - `SKILL.md` — このファイル。呼び出し元の手順と全体像。
 - `coordinator.md` — coordinator が読む手順書。
 - `worker.md` — worker が読む手順書。
+- `harness/poteto-mode.md` — poteto-mode を有効にした場合の連携規則と、herdr でのサブエージェント操作の対応。
 - `supervisor.md` — supervisor が読む手順書（起動は `skills/herdr-supervisor/SKILL.md`）。
 - `scripts/install-skill.sh` — このスキルと `skills/*` を `~/.agents/skills` と `~/.claude/skills` に symlink する。
 - `scripts/prompt-agent.sh` — agent の入力待ち・trust 停止・プロンプト着弾を判定する。

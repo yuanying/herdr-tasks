@@ -63,7 +63,7 @@ supervisor の記録は、タスクディレクトリの親の外にある専用
 - coordinator と worker は別プロセスであり、会話文脈は引き継がれない。渡せるのはファイルのパスだけである。
   そのためタスク仕様書 `TASK.md` の質がそのままタスクの成否を左右する。
 - 完遂の定義は「実装 + テスト通過 + コミット + push + PR」まで。PR は作業単位ごとに、
-  それを担当した worker が出す。マージはユーザーの承認を得てから行う。
+  それを担当した worker が出す。標準運用ではマージはユーザーの承認を得てから行う。
 - coordinator は worker の完了報告を鵜呑みにせず、`git log` / `git diff` とテストの再実行で自ら検証する。
 - coordinator の会話文脈が失われても、タスクディレクトリの記録から再開できる。worker への指示も
   ファイルに残るため、再開に呼び出し元の会話文脈は要らない。
@@ -110,6 +110,13 @@ herdr agent attach <coordinator の agent 名>
 herdr agent attach supervisor
 ```
 
+### poteto-mode との連携（任意）
+
+[poteto-mode](https://github.com/yuanying/skills/tree/main/skills/poteto-mode) を別途インストールし、
+タスクを依頼するときに poteto-mode で進めるよう指定する。呼び出し元が `TASK.md` の「実行環境」に
+`- poteto-mode: 有効` を置くと、そのタスクだけ poteto-mode のプレイブックと承認ルールで進む。
+1 PR = 1 worker とタスクの記録はそのまま。詳しくは[連携手順](harness/poteto-mode.md)を参照。
+
 ## 構成
 
 | ファイル | 内容 |
@@ -117,6 +124,7 @@ herdr agent attach supervisor
 | `SKILL.md` | 呼び出し元の手順と全体像、命名規則 |
 | `coordinator.md` | coordinator が読む手順書 |
 | `worker.md` | worker が読む手順書 |
+| `harness/poteto-mode.md` | poteto-mode と herdr-tasks の連携手順 |
 | `supervisor.md` | supervisor が読む手順書 |
 | `skills/herdr-supervisor/SKILL.md` | supervisor を起動する別スキル。起動済みならその workspace を案内する |
 | `scripts/install-skill.sh` | `herdr-tasks` と `herdr-supervisor` の symlink を張る |
