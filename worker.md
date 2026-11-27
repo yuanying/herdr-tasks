@@ -20,6 +20,11 @@
 
 ## 進め方
 
+起動・再開時に `TASK.md` の「実行環境」を確認する。`- poteto-mode: 有効` がある場合は、
+`~/.agents/skills/poteto-mode/worker.md`（kickoff の 1 行目で指定）と、この手順書に同梱の
+[`harness/poteto-mode.md`](harness/poteto-mode.md) も読み、その連携規則に従う。
+有効なのに必要な文書が読めなければ coordinator に報告し、従来モードに黙って切り替えない。
+
 1. 指示ファイルと `TASK.md` を読み、担当範囲・ゴール・制約・完了条件を把握する。
    **読んだだけで止まらず、確認を待たずに完了条件（PR の作成と coordinator への報告）まで進む。**
    止まるのは、完了したとき、サンドボックスに拒否されたとき、判断に迷ったときだけである。
